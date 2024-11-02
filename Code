@@ -1,0 +1,159 @@
+#include <Wire.h>
+#include <ESP8266WiFi.h>
+#include <FirebaseArduino.h>
+#define FIREBASE_HOST "flexsensorproject-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH
+"L5ihhxFe1HB96YHDdhtMmdvYzXFQ920K6XrP0V1s"
+#define WIFI_SSID "node"
+#define WIFI_PASSWORD "12345678035"
+const uint8_t MPU6050SlaveAddress = 0x68;
+const uint8_t scl = D6;
+const uint8_t sda = D7;
+const int flexSensorPin= D2;
+const int forceSensorPin= D8;const
+int buzzerPin= D1;
+const int redLedPin = D3;
+const int greenLedPin = D4;
+const uint16_t AccelScaleFactor = 16384;
+const uint16_t GyroScaleFactor = 131;
+const uint8_t MPU6050_REGISTER_SMPLRT_DIV = 0x19;
+const uint8_t MPU6050_REGISTER_USER_CTRL = 0x6A;
+const uint8_t MPU6050_REGISTER_PWR_MGMT_1 = 0x6B;
+const uint8_t MPU6050_REGISTER_PWR_MGMT_2 = 0x6C
+
+const uint8_t MPU6050_REGISTER_CONFIG = 0x1A;
+const uint8_t MPU6050_REGISTER_GYRO_CONFIG = 0x1B;
+const uint8_t MPU6050_REGISTER_ACCEL_CONFIG = 0x1C;
+const uint8_t MPU6050_REGISTER_FIFO_EN = 0x23; const
+uint8_t MPU6050_REGISTER_INT_ENABLE = 0x38;
+const uint8_t MPU6050_REGISTER_ACCEL_XOUT_H = 0x3B;
+const uint8_t MPU6050_REGISTER_SIGNAL_PATH_RESET = 0x68;
+int16_t AccelX, AccelY, AccelZ, Temperature, GyroX, GyroY, GyroZ;
+
+void setup() {
+
+Serial.begin(115200);
+Wire.begin(sda, scl);
+MPU6050_Init();
+pinMode(flexSensorPin, INPUT);
+pinMode(forceSensorPin, INPUT);
+pinMode(buzzerPin, OUTPUT);
+pinMode(redLedPin, OUTPUT);
+pinMode(greenLedPin, OUTPUT);
+WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+Serial.print("connecting");
+while (WiFi.status() != WL_CONNECTED)
+{
+Serial.print(".");
+delay(500);
+
+}
+
+Serial.println();
+
+Serial.print("connected: ");
+Serial.println(WiFi.localIP());
+Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+
+}
+int n = 0;
+void loop() {
+
+double Ax, Ay, Az, T, Gx, Gy, Gz;
+Read_RawValue(MPU6050SlaveAddress,
+MPU6050_REGISTER_ACCEL_XOUT_H);
+Ax = (double)AccelX/AccelScaleFactor;
+
+Ay = (double)AccelY/AccelScaleFactor;
+
+Az = (double)AccelZ/AccelScaleFactor;
+
+T = (double)Temperature/340+36.53;
+
+Gx = (double)GyroX/GyroScaleFactor;
+
+Gy = (double)GyroY/GyroScaleFactor;
+
+Gz = (double)GyroZ/GyroScaleFactor;
+
+boolean AxValue = (Ax > 0.20) || (Ay > 0.25) || (Az < 0.80);
+
+int flexSensorValue = digitalRead(flexSensorPin);
+Firebase.set("Flex", flexSensorValue);
+int forceSensorValue = digitalRead(forceSensorPin);
+Firebase.set("Force", forceSensorValue);
+
+if(flexSensorValue || forceSensorValue || AxValue)
+{
+digitalWrite(buzzerPin, HIGH);
+digitalWrite(redLedPin, HIGH);
+digitalWrite(greenLedPin, LOW);
+}
+else
+{
+digitalWrite(buzzerPin, LOW);
+digitalWrite(redLedPin, LOW);
+digitalWrite(greenLedPin, HIGH);
+}
+Firebase.setFloat("Ax", Ax);
+Firebase.setFloat("Ay", Ay);
+Firebase.setFloat("Az", Az);
+Serial.println(flexSensorValue);
+Serial.print("Ax: "); Serial.print(Ax);
+Serial.print(" Ay: "); Serial.print(Ay);
+
+Serial.print(" Az: "); Serial.print(Az);
+delay(1000);
+
+}
+
+void I2C_Write(uint8_t deviceAddress, uint8_t regAddress, uint8_t data)
+{
+
+Wire.beginTransmission(deviceAddress);
+Wire.write(regAddress);
+
+
+Wire.write(data);
+Wire.endTransmission();
+
+}
+void Read_RawValue(uint8_t deviceAddress, uint8_t regAddress){
+
+Wire.beginTransmission(deviceAddress);
+Wire.write(regAddress);
+Wire.endTransmission(); Wire.requestFrom(deviceAddress,
+(uint8_t)14); AccelX = (((int16_t)Wire.read()<<8) | Wire.read());
+AccelY = (((int16_t)Wire.read()<<8) | Wire.read());
+AccelZ = (((int16_t)Wire.read()<<8) | Wire.read());
+Temperature = (((int16_t)Wire.read()<<8) | Wire.read());
+GyroX = (((int16_t)Wire.read()<<8) | Wire.read());
+GyroY = (((int16_t)Wire.read()<<8) | Wire.read());
+GyroZ = (((int16_t)Wire.read()<<8) | Wire.read());
+
+}
+void MPU6050_Init(){
+delay(150);
+
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_SMPLRT_DIV, 0x07);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_PWR_MGMT_1,0x01);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_PWR_MGMT_2, 0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_CONFIG,0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_GYRO_CONFIG, 0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_ACCEL_CONFIG, 0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_FIFO_EN,0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_INT_ENABLE, 0x01);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_SIGNAL_
+PATH_RESET, 0x00);
+I2C_Write(MPU6050SlaveAddress,
+MPU6050_REGISTER_USER_CTRL,0x00);
+}
